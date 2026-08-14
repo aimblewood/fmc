@@ -36,22 +36,35 @@ function formCard(title, sub, formEl, alt) {
 
 const input = (id, type, ph, extra = {}) => el("input", { id, type, placeholder: ph, ...extra });
 
+/* Password-manager-friendly form: real name attributes, POST semantics, and a
+ * completed-navigation signal so LastPass/1Password/Bitwarden offer to save. */
+const authForm = (onsubmit, ...children) => el("form", { method: "post", action: "", onsubmit }, ...children);
+
 function setBusy(btn, busy) {
   btn.disabled = busy;
   btn.textContent = busy ? "One moment…" : btn.dataset.label;
+}
+
+/* Nudge browser-native password managers (Chrome/Edge/Safari) to offer save.
+ * Extension managers (LastPass etc.) key off the form's name attributes instead. */
+function offerCredentialSave(id, password) {
+  try {
+    if (window.PasswordCredential)
+      Promise.resolve(navigator.credentials.store(new window.PasswordCredential({ id, password }))).catch(() => {});
+  } catch { /* non-blocking nicety */ }
 }
 
 export function renderAuth(route, { onAuthed }) {
   const wrap = el("div", { class: "auth-wrap" }, brandPanel());
 
   if (route === "register") {
-    const name = input("f-name", "text", "e.g. Alex Turner", { autocomplete: "name" });
-    const company = input("f-company", "text", "e.g. Turner Logistics Ltd", { autocomplete: "organization" });
-    const email = input("f-email", "email", "you@company.co.uk", { autocomplete: "email" });
-    const pw = input("f-pw", "password", "10+ characters, letters and a number", { autocomplete: "new-password" });
+    const name = input("f-name", "text", "e.g. Alex Turner", { autocomplete: "name", name: "name" });
+    const company = input("f-company", "text", "e.g. Turner Logistics Ltd", { autocomplete: "organization", name: "organization" });
+    const email = input("f-email", "email", "you@company.co.uk", { autocomplete: "email", name: "email" });
+    const pw = input("f-pw", "password", "10+ characters, letters and a number", { autocomplete: "new-password", name: "new-password" });
     const err = el("div", { class: "error", role: "alert", style: "margin-bottom:10px" });
     const btn = el("button", { class: "btn primary", style: "width:100%", "data-label": "Create account" }, "Create account");
-    const form = el("form", { onsubmit: async e => {
+    const form = authForm(async e => {
       e.preventDefault(); err.textContent = "";
       if (!validEmail(email.value)) { err.textContent = "Enter a valid email address."; return; }
       const pwErr = validatePassword(pw.value);
@@ -59,11 +72,12 @@ export function renderAuth(route, { onAuthed }) {
       setBusy(btn, true);
       try {
         const res = await auth.signUp({ email: email.value, password: pw.value, name: name.value, company: company.value });
+        offerCredentialSave(email.value, pw.value);
         if (res?.confirmEmail) { toast("Check your inbox to confirm your email."); location.hash = "#/login"; }
         else { toast("Welcome to the club."); onAuthed(auth.getSession()); }
       } catch (ex) { err.textContent = ex.message; }
       setBusy(btn, false);
-    } },
+    },
       field({ label: "Your name", input: name }),
       field({ label: "Company", input: company }),
       field({ label: "Work email", input: email }),
@@ -76,13 +90,13 @@ export function renderAuth(route, { onAuthed }) {
   }
 
   if (route === "reset") {
-    const email = input("f-email", "email", "you@company.co.uk", { autocomplete: "email" });
-    const pw = input("f-pw", "password", "New password", { autocomplete: "new-password" });
+    const email = input("f-email", "email", "you@company.co.uk", { autocomplete: "email", name: "email" });
+    const pw = input("f-pw", "password", "New password", { autocomplete: "new-password", name: "new-password" });
     const pwWrap = field({ label: "New password", input: pw, hint: "Demo mode resets in place — live mode sends a secure email link." });
     const err = el("div", { class: "error", role: "alert", style: "margin-bottom:10px" });
     const btn = el("button", { class: "btn primary", style: "width:100%", "data-label": "Reset password" }, "Reset password");
     if (auth.mode !== "demo") pwWrap.style.display = "none";
-    const form = el("form", { onsubmit: async e => {
+    const form = authForm(async e => {
       e.preventDefault(); err.textContent = "";
       setBusy(btn, true);
       try {
@@ -97,7 +111,7 @@ export function renderAuth(route, { onAuthed }) {
         location.hash = "#/login";
       } catch (ex) { err.textContent = ex.message; }
       setBusy(btn, false);
-    } },
+    },
       field({ label: "Account email", input: email }),
       pwWrap, err, btn
     );
@@ -107,19 +121,20 @@ export function renderAuth(route, { onAuthed }) {
   }
 
   // sign in
-  const email = input("f-email", "email", "you@company.co.uk", { autocomplete: "email" });
-  const pw = input("f-pw", "password", "Your password", { autocomplete: "current-password" });
+  const email = input("f-email", "email", "you@company.co.uk", { autocomplete: "email", name: "email" });
+  const pw = input("f-pw", "password", "Your password", { autocomplete: "current-password", name: "password" });
   const err = el("div", { class: "error", role: "alert", style: "margin-bottom:10px" });
   const btn = el("button", { class: "btn primary", style: "width:100%", "data-label": "Sign in" }, "Sign in");
-  const form = el("form", { onsubmit: async e => {
+  const form = authForm(async e => {
     e.preventDefault(); err.textContent = "";
     setBusy(btn, true);
     try {
       await auth.signIn({ email: email.value, password: pw.value });
+      offerCredentialSave(email.value, pw.value);
       onAuthed(auth.getSession());
     } catch (ex) { err.textContent = ex.message; }
     setBusy(btn, false);
-  } },
+  },
     field({ label: "Email", input: email }),
     field({ label: "Password", input: pw }),
     err, btn
