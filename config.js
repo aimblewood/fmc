@@ -9,12 +9,9 @@
  *   Fleet data sync moves server-side in phase 2 (see docs/ARCHITECTURE.md).
  */
 window.FMC_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://nylobynklgabdfqljlnc.supabase.co",
+  supabaseAnonKey: "sb_publishable_...",   // your full publishable key, from Supabase → Settings → API Keys
   appName: "Fleet Manager Club",
   domain: "fleetmanager.club",
-
-  /* Global admins: accounts whose email is listed here see the System area
-   * (Theme Studio, Screen Layouts, …). Case-insensitive. */
-  adminEmails: ["edgers-dives8r@icloud.com"]
+  adminEmails: ["simon.homer@mac.com"]
 };
