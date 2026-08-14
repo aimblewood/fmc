@@ -10,7 +10,7 @@
  */
 window.FMC_CONFIG = {
   supabaseUrl: "https://nylobynklgabdfqljlnc.supabase.co",
-  supabaseAnonKey: "sb_publishable_...",   // your full publishable key, from Supabase → Settings → API Keys
+  supabaseAnonKey: "sb_publishable_Z_fu5jwtxrzNnycR2Db6kg_UWNYvCde",   // your full publishable key, from Supabase → Settings → API Keys
   appName: "Fleet Manager Club",
   domain: "fleetmanager.club",
   adminEmails: ["simon.homer@mac.com"]
