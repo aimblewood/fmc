@@ -1,9 +1,10 @@
 /* My Fleet — schema-driven records platform: dashboard, lists, forms,
  * CSV import, renewal alerts. */
 import { el, icon, pageHead, modal, confirmDialog, toast, fmtDate, downloadText } from "../ui.js";
-import { ENTITIES, FUTURE, fieldsOf, inputFieldsOf, LIST_COLUMNS, CSV_SYNONYMS } from "../schema.js";
-import { store, displayTitle, resolveLookup, collectAlerts, dueStatus, loadSampleData, parseCsv, normHeader, toCsv } from "../store.js";
+import { ENTITIES, fieldsOf, inputFieldsOf, LIST_COLUMNS, CSV_SYNONYMS } from "../schema.js";
+import { store, displayTitle, resolveLookup, dueStatus, loadSampleData, parseCsv, normHeader, toCsv } from "../store.js";
 import { gbp } from "../rates.js";
+import { renderLayout } from "../widgets.js";
 
 export function renderFleet(ctx, route) {
   const parts = route.split("/"); // fleet | fleet/<entity>
@@ -15,11 +16,6 @@ export function renderFleet(ctx, route) {
 function dashboard({ rerender }) {
   const counts = store.counts();
   const isEmpty = Object.values(counts).every(n => n === 0);
-  const vehicles = store.list("vehicles");
-  const contracts = store.list("contracts");
-  const alerts = collectAlerts();
-  const evCount = vehicles.filter(v => v.fuelType === "Electric").length;
-  const monthly = contracts.reduce((s, c) => s + (+c.financeRental || 0) + (+c.serviceRental || 0), 0);
 
   const wrap = el("div", { class: "stagger" },
     ...pageHead({
@@ -34,76 +30,16 @@ function dashboard({ rerender }) {
   );
 
   if (isEmpty) {
-    wrap.append(el("div", { class: "card pad-lg", style: "text-align:center" },
+    wrap.append(el("div", { class: "card pad-lg", style: "text-align:center;margin-bottom:16px" },
       el("h2", {}, "Nothing here yet"),
       el("p", { class: "page-sub", style: "margin:0 auto 16px" }, "Import your vehicle spreadsheet (we'll map the columns), add records by hand, or explore with sample data."),
       el("div", { style: "display:flex;gap:10px;justify-content:center;flex-wrap:wrap" },
         el("button", { class: "btn primary", onclick: () => importCsvFlow("vehicles", rerender) }, icon("upload", 16), "Import CSV"),
         el("button", { class: "btn", onclick: () => { loadSampleData(); toast("Sample fleet loaded."); rerender(); } }, "Load sample fleet"))));
-  } else {
-    wrap.append(el("div", { class: "tiles" },
-      tile("Vehicles", String(vehicles.length), "on fleet"),
-      tile("Due in 30 days", String(alerts.length), alerts.length ? "MOTs, renewals, expiries" : "all clear",
-        alerts.some(a => a.status.level === "red") ? "alert-red" : (alerts.length ? "alert" : "")),
-      tile("Electric share", vehicles.length ? Math.round(100 * evCount / vehicles.length) + "%" : "—", evCount + " electric"),
-      tile("Contracted rentals", gbp(monthly), "per month, ex VAT")));
-
-    // fuel mix mini chart
-    if (vehicles.length) {
-      const mix = {};
-      vehicles.forEach(v => { const k = v.fuelType || "Unknown"; mix[k] = (mix[k] || 0) + 1; });
-      const entries = Object.entries(mix).sort((a, b) => b[1] - a[1]);
-      const max = Math.max(...entries.map(e => e[1]));
-      wrap.append(el("div", { class: "grid cols-2", style: "align-items:start" },
-        el("div", { class: "card" },
-          el("h3", {}, "Fleet by fuel"),
-          el("div", { class: "minibar", role: "img", "aria-label": "Fleet count by fuel type" },
-            ...entries.map(([k, n], i) => el("div", { class: "mb-row" },
-              el("span", {}, k),
-              el("div", { class: "mb-track" }, el("div", { class: "mb-fill", style: `width:${n / max * 100}%;background:var(--s1)` })),
-              el("span", { class: "mb-val" }, String(n)))))),
-        alertsCard(alerts)));
-    }
   }
 
-  // record type cards
-  wrap.append(el("h2", { style: "margin:26px 0 10px" }, "Records"));
-  wrap.append(el("div", { class: "grid cols-4" },
-    ...Object.entries(ENTITIES).map(([k, e]) =>
-      el("a", { class: "card tool-card", href: "#/fleet/" + k, style: "padding:16px" },
-        el("div", { class: "tc-ico", style: "width:36px;height:36px" }, icon(e.icon, 19)),
-        el("h3", { style: "font-size:15px" }, e.name),
-        el("div", { class: "tc-foot" },
-          el("span", { class: "badge " + (counts[k] ? "green" : "grey") }, counts[k] + " record" + (counts[k] === 1 ? "" : "s")),
-          icon("arrow", 15))))));
-
-  wrap.append(el("h2", { style: "margin:26px 0 4px" }, "Future add-ons"),
-    el("p", { class: "page-sub" }, "Structured and named, waiting on the roadmap."),
-    el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
-      ...FUTURE.map(f => el("span", { class: "badge grey", style: "font-size:12.5px;padding:7px 13px" }, f + " · soon"))));
-
+  wrap.append(renderLayout("fleet"));
   return wrap;
-}
-
-function tile(label, value, foot, cls = "") {
-  return el("div", { class: "tile " + cls },
-    el("div", { class: "t-label" }, label),
-    el("div", { class: "t-value" }, value),
-    el("div", { class: "t-foot" }, foot));
-}
-
-function alertsCard(alerts) {
-  return el("div", { class: "card" },
-    el("h3", {}, "Coming up"),
-    alerts.length === 0
-      ? el("p", { class: "small", style: "margin:0" }, "Nothing due in the next 30 days.")
-      : el("div", {}, ...alerts.slice(0, 6).map(a =>
-        el("div", { class: "res-row", style: "padding:9px 2px" },
-          el("span", { class: "due " + a.status.level }, el("span", { class: "d" }), a.status.text),
-          el("div", { class: "r-body" },
-            el("div", { class: "r-title", style: "font-size:13.5px" }, a.label + " — " + a.title),
-            el("div", { class: "r-meta" }, fmtDate(a.rec[a.field]))),
-          el("a", { class: "btn ghost sm", href: "#/fleet/" + a.entity }, "Open")))));
 }
 
 /* ---------------- entity list ---------------- */

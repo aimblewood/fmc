@@ -10,6 +10,10 @@ import { renderTaxCalc } from "./views/taxcalc.js";
 import { renderWlc } from "./views/wlc.js";
 import { renderFleet } from "./views/fleet.js";
 import { renderAccount } from "./views/account.js";
+import { renderSystem } from "./views/system.js";
+import { applyCustom, isAdmin } from "./custom.js";
+
+applyCustom();
 
 const app = document.getElementById("app");
 
@@ -58,6 +62,10 @@ function shell(session, route, content) {
         icon(item.ico), item.label, badge);
     }),
     el("div", { class: "rail-spacer" }),
+    isAdmin(session)
+      ? el("a", { class: "nav" + (route?.startsWith("system") ? " active" : ""), href: "#/system", dataset: { test: "system-nav" } },
+          icon("tools"), "System", el("span", { class: "lock", style: "background:var(--brand-tint);color:var(--brand-deep)" }, "ADMIN"))
+      : null,
     el("a", { class: "nav" + (route === "account" ? " active" : ""), href: "#/account" }, icon("person"), "Account & security"),
     el("div", { class: "rail-user" },
       el("div", { class: "avatar" }, initials),
@@ -100,7 +108,11 @@ async function render() {
   const renderer = ROUTES[route] || ROUTES[route?.split("/").slice(0, 2).join("/")] || null;
   const ctx = { session, navigate, rerender: render };
   let content;
-  if (renderer) content = renderer(ctx, route);
+  if (route.startsWith("system")) {
+    if (isAdmin(session)) content = renderSystem(ctx, route);
+    else { toast("The System area is for global admins."); location.replace("#/home"); return; }
+  }
+  else if (renderer) content = renderer(ctx, route);
   else if (route.startsWith("fleet")) content = renderFleet(ctx, route);
   else {
     content = el("div", {}, el("h1", {}, "Not found"), el("p", {}, "That page doesn't exist. ", el("a", { href: "#/home" }, "Back to home")));

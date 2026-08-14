@@ -83,8 +83,9 @@ ok("session survives reload", await page.isVisible(".rail-user"));
 
 /* ---- 2. load sample fleet & dashboard ---- */
 await page.click("text=Load sample fleet");
-await page.waitForSelector(".tiles");
-const tiles = await page.$$eval(".tile .t-value", els => els.map(e => e.textContent.trim()));
+await page.waitForSelector("text=Let's get your fleet in", { state: "detached" });
+await page.waitForSelector(".widget-grid .tile");
+const tiles = await page.$$eval(".widget-grid .tile .t-value", els => els.map(e => e.textContent.trim()));
 ok("home tiles render after sample load", tiles.length === 4, JSON.stringify(tiles));
 ok("vehicle count tile = 6", tiles[0] === "6", tiles[0]);
 ok("EV share tile = 33%", tiles[2] === "33%", tiles[2]);
@@ -92,8 +93,8 @@ await shot("03-home");
 
 /* ---- 3. fleet dashboard & alerts ---- */
 await page.goto(BASE + "#/fleet");
-await page.waitForSelector(".tiles");
-const fleetTiles = await page.$$eval(".tile .t-value", els => els.map(e => e.textContent.trim()));
+await page.waitForSelector(".widget-grid .tile");
+const fleetTiles = await page.$$eval(".widget-grid .tile .t-value", els => els.map(e => e.textContent.trim()));
 ok("fleet dashboard tiles render", fleetTiles.length === 4);
 // sample data: renewal 10d (red), MOT 21d (amber), MOT -3d overdue (red), renewal 34d (ok>30), insurance 79d(ok), endDate 24d (amber), endDate 112d ok...
 // due within 30: renewal 10, MOT 21, MOT -3, contract end 24 => 4
@@ -284,6 +285,104 @@ await page.fill("#f-pw", "newpassword2026");
 await page.click("button.primary");
 await page.waitForSelector(".rail");
 ok("password reset + sign-in with new password", true);
+
+/* ---- 13. admin gating: ordinary member sees no System ---- */
+ok("non-admin: no System nav", !(await page.isVisible('[data-test="system-nav"]')));
+await page.goto(BASE + "#/system");
+await page.waitForTimeout(400);
+ok("non-admin: #/system bounces to home", page.url().includes("#/home"));
+
+/* ---- 14. admin: System area, Theme Studio, Layout builder ---- */
+const actx = await browser.newContext({ viewport: { width: 1380, height: 900 } });
+const apage = await actx.newPage();
+const aErrors = [];
+apage.on("pageerror", e => aErrors.push(e.message));
+// make the test account an admin by serving a patched config.js
+await actx.route("**/config.js", async route => {
+  const body = (await (await fetch(BASE + "/config.js")).text())
+    .replace('adminEmails: ["edgers-dives8r@icloud.com"]', 'adminEmails: ["edgers-dives8r@icloud.com", "admin@test.co.uk"]');
+  route.fulfill({ body, contentType: "text/javascript" });
+});
+await apage.goto(BASE + "#/register");
+await apage.waitForSelector("#f-name");
+await apage.fill("#f-name", "Simon Admin");
+await apage.fill("#f-email", "admin@test.co.uk");
+await apage.fill("#f-pw", "fleetclub2026x");
+await apage.click("button.primary");
+await apage.waitForSelector(".rail");
+ok("admin: System nav visible", await apage.isVisible('[data-test="system-nav"]'));
+
+// Theme Studio: change brand colour via hex input -> primary buttons repaint
+await apage.click('[data-test="system-nav"]');
+await apage.waitForSelector(".theme-row");
+const hexInput = apage.locator(".theme-row input[type=text]").first();
+await hexInput.fill("#0F4C81");
+await hexInput.dispatchEvent("change");
+await apage.waitForTimeout(200);
+const btnBg = await apage.$eval(".btn.primary", el2 => getComputedStyle(el2).backgroundColor);
+ok("theme: brand colour applies live", btnBg === "rgb(15, 76, 129)", btnBg);
+await apage.reload();
+await apage.waitForSelector(".theme-row");
+const btnBg2 = await apage.$eval(".btn.primary", el2 => getComputedStyle(el2).backgroundColor);
+ok("theme: draft persists across reload", btnBg2 === "rgb(15, 76, 129)", btnBg2);
+// font change updates the Google Fonts link
+await apage.selectOption(".form-row select >> nth=0", "Sora");
+await apage.waitForTimeout(200);
+const fontsHref = await apage.$eval("#fmc-fonts", l => l.href);
+ok("theme: display font swap loads Sora", fontsHref.includes("Sora"), fontsHref);
+// contrast checks visible
+ok("theme: accessibility checks render", (await apage.$$eval(".badge.green, .badge.red", b => b.length)) >= 4);
+if (SHOTS) { await apage.waitForTimeout(500); await apage.screenshot({ path: join(ROOT, "shots", "12-theme-studio.png") }); }
+
+// Layout builder
+await apage.goto(BASE + "#/system/layouts");
+await apage.waitForSelector(".wg-edit");
+let order = await apage.$$eval(".builder .wg-edit", els => els.map(e => e.dataset.widget));
+ok("builder: fleet layout shows 8 widgets", order.length === 8, JSON.stringify(order));
+// move second widget up via accessible button
+await apage.click('.wg-edit >> nth=1 >> button[title="Move up"]');
+await apage.waitForTimeout(150);
+order = await apage.$$eval(".builder .wg-edit", els => els.map(e => e.dataset.widget));
+ok("builder: move-up swaps first two", order[0] === "statDue" && order[1] === "statVehicles", JSON.stringify(order));
+// remove the fuel mix widget
+await apage.click('.wg-edit[data-widget="fuelMix"] button[title="Remove"]');
+await apage.waitForTimeout(150);
+order = await apage.$$eval(".builder .wg-edit", els => els.map(e => e.dataset.widget));
+ok("builder: remove widget", !order.includes("fuelMix") && order.length === 7, JSON.stringify(order));
+// drag-and-drop: drag first card onto third
+await apage.hover('.builder .wg-edit >> nth=0');
+const dragOk = await apage.evaluate(() => {
+  const cells = document.querySelectorAll(".builder .wg-edit");
+  const dt = new DataTransfer();
+  cells[0].dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }));
+  cells[2].dispatchEvent(new DragEvent("dragover", { bubbles: true, dataTransfer: dt }));
+  cells[2].dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer: dt }));
+  cells[0].dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: dt }));
+  return true;
+});
+await apage.waitForTimeout(150);
+order = await apage.$$eval(".builder .wg-edit", els => els.map(e => e.dataset.widget));
+ok("builder: drag-and-drop reorders", dragOk && order[2] === "statDue", JSON.stringify(order));
+if (SHOTS) { await apage.waitForTimeout(400); await apage.screenshot({ path: join(ROOT, "shots", "13-layout-builder.png") }); }
+
+// the edited layout drives the real fleet dashboard
+await apage.goto(BASE + "#/fleet");
+await apage.waitForSelector(".widget-grid");
+const liveOrder = await apage.$$eval(".widget-grid .wg-item", els => els.map(e => e.dataset.widget));
+ok("builder: live dashboard follows edited layout", !liveOrder.includes("fuelMix") && liveOrder[2] === "statDue", JSON.stringify(liveOrder));
+
+// publish downloads customisation.js containing both theme + layout
+await apage.goto(BASE + "#/system");
+await apage.waitForSelector("text=Publish");
+const dl3p = apage.waitForEvent("download");
+await apage.click('button:has-text("Publish")');
+const dl3 = await dl3p;
+ok("publish downloads customisation.js", (await dl3.suggestedFilename()) === "customisation.js");
+const dlPath = await dl3.path();
+const dlBody = await readFile(dlPath, "utf8");
+ok("published file carries theme + layouts", dlBody.includes("#0F4C81") && dlBody.includes("statDue") && !dlBody.match(/"w": "fuelMix"/), "");
+ok("admin flow: no JS errors", aErrors.length === 0, aErrors.slice(0, 3).join(" | "));
+await actx.close();
 
 /* ---- console errors ---- */
 const realErrors = consoleErrors.filter(e => !e.includes("favicon") && !/Failed to load resource/.test(e));

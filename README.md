@@ -1,4 +1,20 @@
-# fleetmanager.club — platform v0.1
+# fleetmanager.club — platform v0.2
+
+**New in v0.2 — the System area (global admin).** Accounts listed in
+`config.js → adminEmails` get a System item in the sidebar:
+
+- **Theme Studio** — colours, font pairing, heading weight/size/spacing,
+  corner radius. Applies live with WCAG contrast checks.
+- **Screen Layouts** — drag-and-drop widget builder for the Home and
+  My Fleet dashboards (reorder, resize, add/remove). The same widget
+  registry will power per-member dashboards later.
+- **Publish** — changes preview in your browser only until you export
+  the generated `customisation.js` and commit it to the repo root,
+  which makes them live for every member.
+
+---
+
+# v0.1 baseline
 
 The first working build of the member platform: login/security, **Resources**,
 **Tools** (company car tax calculator · whole life cost calculator · My Fleet),
