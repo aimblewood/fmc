@@ -1,6 +1,18 @@
-# fleetmanager.club — platform v0.2
+# fleetmanager.club — platform v0.3
 
-**New in v0.2 — the System area (global admin).** Accounts listed in
+**New in v0.3 — the concept restyle.** Horizontal top nav + mobile tab bar,
+the "voice layer" (stat substories, contextual alerts with verbs), segmented
+controls and a dark hero panel on the tax calculator, honest-comparison WLC
+(winner pill in £, shared bar scales, FD export), fleet-by-fuel strip chart,
+count-first record cells, vehicles list with filter chips + next-due default
+sort, member-voted tool bench, and an animated road on sign-in. Rates
+refreshed to 1 Sept 2026 AFRs (stamp: 2 October 2026).
+
+---
+
+# v0.2
+
+**New in v0.3 — the design-concept transplant.** Top navigation (mobile bottom tabs), concept tokens as the default theme, triage home, dark briefing card, tax calculator hero panel with segmented controls, shared-scale WLC comparison with FD export, vehicles filter chips with computed due-date status, and a member-voted roadmap on the Tools bench. **v0.2 added:** Accounts listed in
 `config.js → adminEmails` get a System item in the sidebar:
 
 - **Theme Studio** — colours, font pairing, heading weight/size/spacing,
